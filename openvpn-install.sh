@@ -237,7 +237,7 @@ key server.key
 dh dh.pem
 tls-auth ta.key 0
 topology subnet
-cipher AES-128-CBC
+cipher AES-256-CBC
 auth SHA512
 server 10.8.0.0 255.255.255.0
 ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
@@ -358,7 +358,7 @@ nobind
 persist-key
 persist-tun
 remote-cert-tls server
-cipher AES-128-CBC
+cipher AES-256-CBC
 auth SHA512
 comp-lzo
 setenv opt block-outside-dns
