@@ -1,5 +1,5 @@
 ##openvpn-install
-Forked from [Nyr/openvpn-install](https://github.com/Nyr/openvpn-install).
+Forked from [cwaffles](https://github.com/cwaffles/ezopenvpn) and [Nyr/openvpn-install](https://github.com/Nyr/openvpn-install)
 
 This script will let you setup your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be as unobtrusive and universal as possible.
 
