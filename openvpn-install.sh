@@ -91,7 +91,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			# Generates the custom client.ovpn
 			newclient "$CLIENT"
 			echo ""
-			echo "Client $CLIENT added, configuration is available at" ~/"$CLIENT.ovpn"
+			echo "Client $CLIENT added, certs available at ~/$CLIENT.ovpn"
 			exit
 			;;
 			2)
@@ -131,23 +131,16 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			read -p "Do you really want to remove OpenVPN? [y/n]: " -e -i n REMOVE
 			if [[ "$REMOVE" = 'y' ]]; then
 				PORT=$(grep '^port ' /etc/openvpn/server.conf | cut -d " " -f 2)
-				if pgrep firewalld; then
-					# Using both permanent and not permanent rules to avoid a firewalld reload.
-					firewall-cmd --zone=public --remove-port=$PORT/udp
-					firewall-cmd --zone=trusted --remove-source=10.8.0.0/24
-					firewall-cmd --permanent --zone=public --remove-port=$PORT/udp
-					firewall-cmd --permanent --zone=trusted --remove-source=10.8.0.0/24
-				fi
-				if iptables -L -n | grep -qE 'REJECT|DROP'; then
-					sed -i "/iptables -I INPUT -p udp --dport $PORT -j ACCEPT/d" $RCLOCAL
-					sed -i "/iptables -I FORWARD -s 10.8.0.0\/24 -j ACCEPT/d" $RCLOCAL
-					sed -i "/iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT/d" $RCLOCAL
-				fi
+
+				sed -i "/iptables -I INPUT -p tcp --dport $PORT -j ACCEPT/d" $RCLOCAL
+				sed -i "/iptables -I FORWARD -s 10.8.0.0\/24 -j ACCEPT/d" $RCLOCAL
+				sed -i "/iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT/d" $RCLOCAL
 				sed -i '/iptables -t nat -A POSTROUTING -s 10.8.0.0\/24 -j SNAT --to /d' $RCLOCAL
+
 				if hash sestatus 2>/dev/null; then
 					if sestatus | grep "Current mode" | grep -qs "enforcing"; then
 						if [[ "$PORT" != '1194' ]]; then
-							semanage port -d -t openvpn_port_t -p udp $PORT
+							semanage port -d -t openvpn_port_t -p tcp $PORT
 						fi
 					fi
 				fi
@@ -181,7 +174,7 @@ else
 	echo "listening to."
 	read -p "IP address: " -e -i $IP IP
 	echo ""
-	echo "What port do you want for OpenVPN?"
+	echo "What TCP port do you want for OpenVPN?"
 	read -p "Port: " -e -i 1194 PORT
 	echo ""
 	echo "What DNS do you want to use with the VPN?"
@@ -191,7 +184,7 @@ else
 	echo "   4) NTT"
 	echo "   5) Hurricane Electric"
 	echo "   6) Verisign"
-	read -p "DNS [1-6]: " -e -i 1 DNS
+	read -p "DNS [1-6]: " -e -i 2 DNS
 	echo ""
 	echo "Finally, tell me your name for the client cert"
 	echo "Please, use one word only, no special characters"
@@ -234,7 +227,7 @@ else
 	openvpn --genkey --secret /etc/openvpn/ta.key
 	# Generate server.conf
 	echo "port $PORT
-proto udp
+proto tcp
 dev tun
 sndbuf 0
 rcvbuf 0
@@ -244,6 +237,8 @@ key server.key
 dh dh.pem
 tls-auth ta.key 0
 topology subnet
+cipher AES-128-CBC
+auth SHA512
 server 10.8.0.0 255.255.255.0
 ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 	echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server.conf
@@ -276,7 +271,6 @@ ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 		;;
 	esac
 	echo "keepalive 10 120
-cipher AES-256-CBC
 comp-lzo
 user nobody
 group $GROUPNAME
@@ -295,26 +289,21 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 	# Set NAT for the VPN subnet
 	iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -j SNAT --to $IP
 	sed -i "1 a\iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -j SNAT --to $IP" $RCLOCAL
-	if pgrep firewalld; then
-		# We don't use --add-service=openvpn because that would only work with
-		# the default port. Using both permanent and not permanent rules to
-		# avoid a firewalld reload.
-		firewall-cmd --zone=public --add-port=$PORT/udp
-		firewall-cmd --zone=trusted --add-source=10.8.0.0/24
-		firewall-cmd --permanent --zone=public --add-port=$PORT/udp
-		firewall-cmd --permanent --zone=trusted --add-source=10.8.0.0/24
-	fi
-	if iptables -L -n | grep -qE 'REJECT|DROP'; then
-		# If iptables has at least one REJECT rule, we asume this is needed.
-		# Not the best approach but I can't think of other and this shouldn't
-		# cause problems.
-		iptables -I INPUT -p udp --dport $PORT -j ACCEPT
-		iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
-		iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-		sed -i "1 a\iptables -I INPUT -p udp --dport $PORT -j ACCEPT" $RCLOCAL
-		sed -i "1 a\iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT" $RCLOCAL
-		sed -i "1 a\iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" $RCLOCAL
-	fi
+
+	# Allow
+	iptables -I INPUT -p tcp --dport $PORT -j ACCEPT
+	iptables -A OUTPUT -p tcp --sport $PORT -j ACCEPT
+	iptables -I INPUT -p tcp --dport 22 -j ACCEPT
+	iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT
+	iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
+	iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT	
+	sed -i "1 a\iptables -I INPUT -p tcp --dport $PORT -j ACCEPT" $RCLOCAL
+	sed -i "1 a\iptables -A OUTPUT -p tcp --sport $PORT -j ACCEPT" $RCLOCAL
+	sed -i "1 a\iptables -I INPUT -p tcp --dport 22 -j ACCEPT" $RCLOCAL
+	sed -i "1 a\iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT" $RCLOCAL
+	sed -i "1 a\iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT" $RCLOCAL
+	sed -i "1 a\iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" $RCLOCAL
+	
 	# If SELinux is enabled and a custom port was selected, we need this
 	if hash sestatus 2>/dev/null; then
 		if sestatus | grep "Current mode" | grep -qs "enforcing"; then
@@ -323,7 +312,7 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 				if ! hash semanage 2>/dev/null; then
 					yum install policycoreutils-python -y
 				fi
-				semanage port -a -t openvpn_port_t -p udp $PORT
+				semanage port -a -t openvpn_port_t -p tcp $PORT
 			fi
 		fi
 	fi
@@ -360,7 +349,7 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 	# client-common.txt is created so we have a template to add further users later
 	echo "client
 dev tun
-proto udp
+proto tcp
 sndbuf 0
 rcvbuf 0
 remote $IP $PORT
@@ -369,7 +358,8 @@ nobind
 persist-key
 persist-tun
 remote-cert-tls server
-cipher AES-256-CBC
+cipher AES-128-CBC
+auth SHA512
 comp-lzo
 setenv opt block-outside-dns
 key-direction 1
@@ -379,6 +369,6 @@ verb 3" > /etc/openvpn/client-common.txt
 	echo ""
 	echo "Finished!"
 	echo ""
-	echo "Your client configuration is available at" ~/"$CLIENT.ovpn"
+	echo "Your client config is available at ~/$CLIENT.ovpn"
 	echo "If you want to add more clients, you simply need to run this script another time!"
 fi
