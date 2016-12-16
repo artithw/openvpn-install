@@ -13,6 +13,15 @@ Once it ends, you can run it again to add more users, remove some of them or eve
 ###I want to run my own VPN but don't have a server for that
 You can get a VPS for just $5/month at [DigitalOcean](https://m.do.co/c/9a33fb00e021).
 
+###New modify From forked repository
+
+- Use cipher AES-256-CBC
+- Support TLS 1.2 (OpenVPN 2.3+)
+- Support SHA512
+- Use Protocal TCP 
+- Use Port 1194
+- Default Google Public DNS [2]
+
 ###Donations
 
 You can donate via [PayPal](https://www.paypal.me/fordantitrust/5) or [Bitcoin](https://www.coinbase.com/fordantitrust). Thanks!
