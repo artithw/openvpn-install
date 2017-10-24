@@ -139,7 +139,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 
 				if hash sestatus 2>/dev/null; then
 					if sestatus | grep "Current mode" | grep -qs "enforcing"; then
-						if [[ "$PORT" != '1194' ]]; then
+						if [[ "$PORT" != '443' ]]; then
 							semanage port -d -t openvpn_port_t -p tcp $PORT
 						fi
 					fi
@@ -175,7 +175,7 @@ else
 	read -p "IP address: " -e -i $IP IP
 	echo ""
 	echo "What TCP port do you want for OpenVPN?"
-	read -p "Port: " -e -i 1194 PORT
+	read -p "Port: " -e -i 443 PORT
 	echo ""
 	echo "What DNS do you want to use with the VPN?"
 	echo "   1) Current system resolvers"
@@ -307,7 +307,7 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 	# If SELinux is enabled and a custom port was selected, we need this
 	if hash sestatus 2>/dev/null; then
 		if sestatus | grep "Current mode" | grep -qs "enforcing"; then
-			if [[ "$PORT" != '1194' ]]; then
+			if [[ "$PORT" != '443' ]]; then
 				# semanage isn't available in CentOS 6 by default
 				if ! hash semanage 2>/dev/null; then
 					yum install policycoreutils-python -y
